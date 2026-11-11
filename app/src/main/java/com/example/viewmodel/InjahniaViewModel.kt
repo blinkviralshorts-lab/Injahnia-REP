@@ -10,6 +10,7 @@ import com.example.data.model.SavedBuildItem
 import com.example.data.reference.EngineSpecItem
 import com.example.data.reference.EngineSpecSheetBuilder
 import com.example.data.reference.MachiningOperation
+import com.example.data.reference.MeasurementEvaluator
 import com.example.data.reference.VerificationBadge
 import com.example.data.reference.WorkshopReferenceData
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -174,11 +175,17 @@ class InjahniaViewModel(
                 kotlinx.coroutines.delay(400) // Brief realistic calculation delay
                 _isGenerating.value = false
 
-                val responseText = EngineSpecSheetBuilder.generateSpecSheetForEngine("$currentEngine $query")
-                val badge = if (responseText.contains("[VERIFIED OEM SPEC]")) {
-                    VerificationBadge.VERIFIED_OEM
+                val (responseText, badge) = if (MeasurementEvaluator.canEvaluate(query)) {
+                    val eval = MeasurementEvaluator.evaluateMeasurement(query, currentEngine)
+                    eval.formattedReport to eval.statusBadge
                 } else {
-                    VerificationBadge.GENERAL_GUIDELINE
+                    val specText = EngineSpecSheetBuilder.generateSpecSheetForEngine("$currentEngine $query")
+                    val b = if (specText.contains("[VERIFIED OEM SPEC]")) {
+                        VerificationBadge.VERIFIED_OEM
+                    } else {
+                        VerificationBadge.GENERAL_GUIDELINE
+                    }
+                    specText to b
                 }
 
                 val assistantMessage = ChatMessage(
@@ -226,7 +233,18 @@ class InjahniaViewModel(
                 )
                 _messages.value = _messages.value + assistantMessage
             }.onFailure { err ->
-                _chatError.value = err.localizedMessage ?: "Failed to generate answer."
+                if (MeasurementEvaluator.canEvaluate(query)) {
+                    val eval = MeasurementEvaluator.evaluateMeasurement(query, currentEngine)
+                    val assistantMessage = ChatMessage(
+                        isUser = false,
+                        text = eval.formattedReport,
+                        engineCode = currentEngine.takeIf { it.isNotBlank() },
+                        verificationBadge = eval.statusBadge
+                    )
+                    _messages.value = _messages.value + assistantMessage
+                } else {
+                    _chatError.value = err.localizedMessage ?: "Failed to generate answer."
+                }
             }
         }
     }

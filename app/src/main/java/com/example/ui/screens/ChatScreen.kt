@@ -1,13 +1,16 @@
 package com.example.ui.screens
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.speech.RecognizerIntent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,6 +40,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PrecisionManufacturing
@@ -78,6 +82,7 @@ import com.example.ui.screens.chat.SpecViewControls
 import com.example.ui.screens.chat.ToleranceCardsGrid
 import com.example.ui.screens.chat.TorqueSequenceView
 import com.example.ui.screens.chat.UnitDisplayMode
+import com.example.ui.screens.chat.VoiceMeasurementDialog
 import com.example.ui.theme.CarbonBlack
 import com.example.ui.theme.CriticalRed
 import com.example.ui.theme.ElectricBlue
@@ -108,37 +113,35 @@ fun ChatScreen(
     val chatError by viewModel.chatError.collectAsState()
     val listState = rememberLazyListState()
 
-    val speechLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == android.app.Activity.RESULT_OK) {
-            val spokenMatches = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-            val spokenText = spokenMatches?.firstOrNull()
-            if (!spokenText.isNullOrBlank()) {
-                viewModel.onChatInputChanged(spokenText)
-                viewModel.sendChatMessage(spokenText)
-                Toast.makeText(context, "Query: $spokenText", Toast.LENGTH_SHORT).show()
-            }
+    var showVoiceMeasurementDialog by remember { mutableStateOf(false) }
+
+    val audioPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            showVoiceMeasurementDialog = true
+        } else {
+            Toast.makeText(context, "Microphone permission is required for hands-free engine measurements", Toast.LENGTH_LONG).show()
         }
     }
 
-    val onMicClick = {
-        val speechIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Ask any clearance, torque spec, or machining procedure...")
-        }
-        try {
-            speechLauncher.launch(speechIntent)
-        } catch (e: Exception) {
-            Toast.makeText(context, "Voice input is not available on this device", Toast.LENGTH_SHORT).show()
+    val openVoiceMeasurement = {
+        val permissionCheck = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+        if (permissionCheck == PackageManager.PERMISSION_GRANTED) {
+            showVoiceMeasurementDialog = true
+        } else {
+            audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
 
     val quickChips = listOf(
+        "Cylinder 1 bore 86.035 mm and piston 85.960 mm",
+        "Top ring end gap measured 0.018 inch",
         "Piston-to-wall clearance for forged pistons",
-        "Multi-angle valve seat cutting specifications",
+        "Main bearing 3 oil clearance 0.038 mm",
+        "Connecting rod bearing clearance 0.0016 inch",
+        "Deck surface warpage measured 0.0015 inch",
         "Deck surface finish Ra for MLS head gasket",
-        "Crankshaft -0.25mm grind & fillet radius",
         "Torque-to-yield head bolt tightening angle"
     )
 
@@ -207,11 +210,42 @@ fun ChatScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // Large All Specs Sheet Button
+                        // Hands-Free Voice Measurement Button
                         Surface(
                             shape = RoundedCornerShape(10.dp),
                             color = MaterialTheme.colorScheme.primaryContainer,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+                            modifier = Modifier
+                                .testTag("hands_free_voice_button")
+                                .height(46.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { openVoiceMeasurement() }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.GraphicEq,
+                                    contentDescription = "Hands-Free Voice Measurement",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Voice Meas.",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        // Large All Specs Sheet Button
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                             modifier = Modifier
                                 .testTag("load_spec_sheet_button")
                                 .height(46.dp)
@@ -220,18 +254,18 @@ fun ChatScreen(
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.PrecisionManufacturing,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(16.dp)
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "All Specs Sheet",
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    text = "Specs",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -250,7 +284,7 @@ fun ChatScreen(
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Clear,
@@ -418,7 +452,7 @@ fun ChatScreen(
 
                     // Big Voice Mic Button for dirty hands
                     IconButton(
-                        onClick = onMicClick,
+                        onClick = openVoiceMeasurement,
                         modifier = Modifier
                             .testTag("chat_voice_mic_button")
                             .size(52.dp)
@@ -428,7 +462,7 @@ fun ChatScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Mic,
-                            contentDescription = "Speak query with microphone",
+                            contentDescription = "Hands-free voice measurement input",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(24.dp)
                         )
@@ -455,6 +489,17 @@ fun ChatScreen(
                     }
                 }
             }
+        }
+
+        // Dedicated Hands-Free Voice Measurement Dialog for mechanics with dirty hands
+        if (showVoiceMeasurementDialog) {
+            VoiceMeasurementDialog(
+                engineCode = engineCode,
+                onDismiss = { showVoiceMeasurementDialog = false },
+                onSendQuery = { query ->
+                    viewModel.sendChatMessage(query)
+                }
+            )
         }
     }
 }
