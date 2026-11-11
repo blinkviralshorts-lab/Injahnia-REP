@@ -1,0 +1,6 @@
+{
+  "name": "Injahnia",
+  "description": "Automotive engine machining and reconditioning AI assistant with bring-your-own Gemini API key, technical specifications, and clearance calculations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
